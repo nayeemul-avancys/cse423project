@@ -16,12 +16,19 @@ class GameState:
         self.level = 1
         self.base_width = 700
         self.base_height = 700
+        self.health = 3  # Add initial health
 
     def get_current_width(self):
-        return self.base_width - ((self.level - 1) * 140)
+        return self.base_width - ((self.level - 1) * 50)  # Changed from 140 to 100
 
     def get_current_height(self):
-        return self.base_height - ((self.level - 1) * 140)
+        return self.base_height - ((self.level - 1) * 50)  # Changed from 140 to 100
+
+    def get_offset_x(self):
+        return (self.base_width - self.get_current_width()) // 2
+
+    def get_offset_y(self):
+        return (self.base_height - self.get_current_height()) // 2
 
 
 game = GameState()
@@ -29,6 +36,9 @@ shooter = {'x': game.width//2, 'y': 10, 'width': 40, 'height': 50, 'speed': 18}
 bullets = []
 circles = []
 special_circle_chance = 0.05  
+healing_circle_chance = 0.02  # Add this new constant
+tough_circle_chance = 0.01  # Add this new constant
+score_circle_chance = 0.005  # New 0.5% chance circle
 
 
 def draw_circle(xc, yc, radius):
@@ -96,16 +106,19 @@ def draw_line(x1, y1, x2, y2):
     glEnd()
 
 
-def draw_shooter():
+def draw_shooter_at_pos(x, y):
+    draw_line(x - 20, y + 30, x + 20, y + 30)
+    draw_line(x - 20, y + 30, x, y + 50)
+    draw_line(x + 20, y + 30, x, y + 50)
+    draw_line(x - 20, y, x + 20, y)
+    draw_line(x - 20, y + 30, x - 20, y)
+    draw_line(x + 20, y + 30, x + 20, y)
 
-    glColor3f(1.0, 1.0, 1.0)  
-    draw_line(shooter['x'] - 20, shooter['y'] + 30, shooter['x'] + 20, shooter['y'] + 30)  
-    draw_line(shooter['x'] - 20, shooter['y'] + 30, shooter['x'], shooter['y'] + 50) 
-    draw_line(shooter['x'] + 20, shooter['y'] + 30, shooter['x'], shooter['y'] + 50)  
-    
-    draw_line(shooter['x'] - 20, shooter['y'], shooter['x'] + 20, shooter['y']) 
-    draw_line(shooter['x'] - 20, shooter['y'] + 30, shooter['x'] - 20, shooter['y'])  
-    draw_line(shooter['x'] + 20, shooter['y'] + 30, shooter['x'] + 20, shooter['y'])  
+
+def draw_shooter():
+    glColor3f(1.0, 1.0, 1.0)
+    draw_shooter_at_pos(shooter['x'] + game.get_offset_x(), 
+                       shooter['y'] + game.get_offset_y())
 
 
 def draw_buttons():
@@ -145,13 +158,53 @@ def check_collision(box1, box2):
 
 
 def spawn_circle():
-    if random.random() < special_circle_chance:
+    chance = random.random()
+    if chance < score_circle_chance:  # Check for score circle first
+        circle = {
+            'x': random.randint(50, game.get_current_width() - 50),
+            'y': game.get_current_height() - 50,
+            'radius': 30,  # Largest radius
+            'speed': 0.3,
+            'special': False,
+            'healing': False,
+            'tough': False,
+            'score_boost': True,  # New property
+            'hitpoints': 5,  # 5 hits to destroy
+            'width': 60,
+            'height': 60
+        }
+    elif chance < score_circle_chance + tough_circle_chance:  # Check for tough circle first
+        circle = {
+            'x': random.randint(50, game.get_current_width() - 50),
+            'y': game.get_current_height() - 50,
+            'radius': 25,  # Bigger radius to show it's tougher
+            'speed': 0.3,
+            'special': False,
+            'healing': False,
+            'tough': True,  # New property for tough circles
+            'hitpoints': 3,  # Requires 3 hits
+            'width': 50,
+            'height': 50
+        }
+    elif chance < score_circle_chance + tough_circle_chance + healing_circle_chance:
+        circle = {
+            'x': random.randint(50, game.get_current_width() - 50),
+            'y': game.get_current_height() - 50,
+            'radius': 15,
+            'speed': 0.3,
+            'special': False,
+            'healing': True,  # New property for healing circles
+            'width': 30,
+            'height': 30
+        }
+    elif chance < score_circle_chance + tough_circle_chance + healing_circle_chance + special_circle_chance:
         circle = {
             'x': random.randint(50, game.get_current_width() - 50),
             'y': game.get_current_height() - 50,
             'radius': 20,
-            'speed': 0.3,  # Increased from 0.05
+            'speed': 0.3,
             'special': True,
+            'healing': False,
             'expanding': True,
             'width': 40,
             'height': 40
@@ -161,8 +214,9 @@ def spawn_circle():
             'x': random.randint(50, game.get_current_width() - 50),
             'y': game.get_current_height() - 50,
             'radius': 15,
-            'speed': 0.3,  # Increased from 0.05
+            'speed': 0.3,
             'special': False,
+            'healing': False,
             'width': 30,
             'height': 30
         }
@@ -205,11 +259,13 @@ def handle_keyboard(key, x, y):
 
 
 def reset_game():
+    game.level=1
     game.score = 0
     game.missed_circles = 0
     game.missed_bullets = 0  
     game.paused = False
     game.game_over = False
+    game.health = 3  # Reset health
     circles.clear()
     bullets.clear()
     shooter['x'] = game.width // 2
@@ -224,11 +280,11 @@ def update():
         if bullet['y'] > game.get_current_height():
             bullets.remove(bullet)
             game.missed_bullets += 1  
-            print(f"Missed shots: {game.missed_bullets}")
-            if game.missed_bullets >= 3:
-                game.game_over = True
-                print(f"Game Over! Too many missed shots! Final score: {game.score}")
-                return
+            # print(f"Missed shots: {game.missed_bullets}")
+            # if game.missed_bullets >= 3:
+            #     game.game_over = True
+            #     print(f"Game Over! Too many missed shots! Final score: {game.score}")
+            #     return
 
     for circle in circles[:]:
         circle['y'] -= circle['speed']
@@ -245,23 +301,42 @@ def update():
             circle['width'] = circle['radius'] * 2
             circle['height'] = circle['radius'] * 2
 
-
         for bullet in bullets[:]:
             if check_collision(bullet, circle):
-                if circle['special']:
+                if circle.get('score_boost'):  # Handle score boost circle
+                    circle['hitpoints'] -= 1
+                    if circle['hitpoints'] <= 0:
+                        game.score += 10  # Add 10 to score
+                        circles.remove(circle)
+                    print(f"Hit score circle! Remaining HP: {circle.get('hitpoints', 0)}")
+                elif circle.get('tough'):  # Handle tough circle collision
+                    circle['hitpoints'] -= 1
+                    if circle['hitpoints'] <= 0:
+                        game.score += 5  # More points for destroying tough circle
+                        circles.remove(circle)
+                    print(f"Hit tough circle! Remaining HP: {circle.get('hitpoints', 0)}")
+                elif circle['healing']:
+                    game.health = min(game.health + 1, 3)  # Cap health at 3
+                    print(f"Health restored! Current health: {game.health}")
+                elif circle['special']:
                     game.score += 3
                 else:
                     game.score += 1
                 print(f"Score: {game.score}")
                 if bullet in bullets:
                     bullets.remove(bullet)
-                if circle in circles:
+                if circle in circles and not circle.get('tough', False) and not circle.get('score_boost', False):  # Only remove non-tough circles immediately
                     circles.remove(circle)
 
         if check_collision(circle, shooter):
-            game.game_over = True
-            print(f"Game Over! Final score: {game.score}")
-            return
+            game.health -= 1  # Reduce health instead of immediate game over
+            circles.remove(circle)  # Remove the circle that hit the player
+            print(f"Hit! Health remaining: {game.health}")
+            if game.health <= 0:
+                game.game_over = True
+                print(f"Game Over! Final score: {game.score}")
+                return
+            break  # Exit the loop since we removed a circle
 
         if circle['y'] < 0:
             if circle in circles:
@@ -278,8 +353,8 @@ def update():
 
     if game.score >= game.level * 10:  # Progress every 10 points
         game.level += 1
+        circles.clear()  # Clear all circles when zone shrinks
         print(f"Level {game.level}! Field is shrinking!")
-        # Ensure shooter stays in bounds after shrinking
         shooter['x'] = min(shooter['x'], game.get_current_width() - 20)
 
 
@@ -290,23 +365,42 @@ def display():
     glColor3f(0.5, 0.5, 0.5)  # Gray color for boundary
     current_width = game.get_current_width()
     current_height = game.get_current_height()
-    draw_line(0, 0, current_width, 0)
-    draw_line(current_width, 0, current_width, current_height)
-    draw_line(current_width, current_height, 0, current_height)
-    draw_line(0, current_height, 0, 0)
+    offset_x = game.get_offset_x()
+    offset_y = game.get_offset_y()
+    
+    # Draw centered boundary
+    draw_line(offset_x, offset_y, offset_x + current_width, offset_y)  # bottom
+    draw_line(offset_x + current_width, offset_y, offset_x + current_width, offset_y + current_height)  # right
+    draw_line(offset_x + current_width, offset_y + current_height, offset_x, offset_y + current_height)  # top
+    draw_line(offset_x, offset_y + current_height, offset_x, offset_y)  # left
 
-    draw_shooter()
+    # Adjust all game elements by offset
+    shooter_x = shooter['x'] + offset_x
+    shooter_y = shooter['y'] + offset_y
+    
+    # Draw shooter at offset position
+    glColor3f(1.0, 1.0, 1.0)
+    draw_shooter_at_pos(shooter_x, shooter_y)
 
-    glColor3f(1.0, 1.0, 0.0) 
+    # Draw bullets with offset
+    glColor3f(1.0, 1.0, 0.0)
     for bullet in bullets:
-        draw_line(bullet['x'], bullet['y'], bullet['x'], bullet['y'] + 10)
+        draw_line(bullet['x'] + offset_x, bullet['y'] + offset_y, 
+                 bullet['x'] + offset_x, bullet['y'] + offset_y + 10)
 
+    # Draw circles with offset
     for circle in circles:
-        if circle['special']:
-            glColor3f(1.0, 0.0, 1.0)  
+        if circle.get('score_boost'):
+            glColor3f(1.0, 0.843, 0.0)  # Gold color for score boost circles
+        elif circle.get('tough'):
+            glColor3f(0.5, 0.8, 1.0)  # Light blue for tough circles
+        elif circle['healing']:
+            glColor3f(1.0, 0.0, 0.0)  # Red for healing circles
+        elif circle['special']:
+            glColor3f(1.0, 0.0, 1.0)  # Existing purple for special circles
         else:
-            glColor3f(0.0, 1.0, 0.0)  
-        draw_circle(circle['x'], circle['y'], int(circle['radius']))
+            glColor3f(0.0, 1.0, 0.0)  # Existing green for normal circles
+        draw_circle(circle['x'] + offset_x, circle['y'] + offset_y, int(circle['radius']))
 
     draw_buttons()
 
