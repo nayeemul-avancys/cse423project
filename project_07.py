@@ -17,12 +17,20 @@ class GameState:
         self.base_width = 700
         self.base_height = 700
         self.health = 3  # Add initial health
+        self.special_circle_chance = 0.05
+        self.healing_circle_chance = 0.02
+        self.tough_circle_chance = 0.01
+        self.score_circle_chance = 0.005
+        self.forgiveness_circle_chance = 0.01
+        self.homing_circle_chance = 0.005
 
+
+        
     def get_current_width(self):
-        return self.base_width - ((self.level - 1) * 50)  # Changed from 140 to 100
+        return self.base_width - ((self.level - 1) * 50)  
 
     def get_current_height(self):
-        return self.base_height - ((self.level - 1) * 50)  # Changed from 140 to 100
+        return self.base_height - ((self.level - 1) * 50)  
 
     def get_offset_x(self):
         return (self.base_width - self.get_current_width()) // 2
@@ -35,10 +43,7 @@ game = GameState()
 shooter = {'x': game.width//2, 'y': 10, 'width': 40, 'height': 50, 'speed': 18}  
 bullets = []
 circles = []
-special_circle_chance = 0.05  
-healing_circle_chance = 0.02  # Add this new constant
-tough_circle_chance = 0.01  # Add this new constant
-score_circle_chance = 0.005  # New 0.5% chance circle
+
 
 
 def draw_circle(xc, yc, radius):
@@ -159,10 +164,39 @@ def check_collision(box1, box2):
 
 def spawn_circle():
     chance = random.random()
-    if chance < score_circle_chance:  # Check for score circle first
+    if chance < game.homing_circle_chance:  # Check for homing circle first
         circle = {
-            'x': random.randint(50, game.get_current_width() - 50),
-            'y': game.get_current_height() - 50,
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
+            'radius': 20,
+            'speed': 0.5,  # Slightly faster than normal circles
+            'special': False,
+            'healing': False,
+            'tough': False,
+            'score_boost': False,
+            'forgiveness': False,
+            'homing': True,  # New property
+            'width': 40,
+            'height': 40
+        }
+    elif chance < game.homing_circle_chance + game.forgiveness_circle_chance:  # Check for forgiveness circle first
+        circle = {
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
+            'radius': 20,
+            'speed': 0.3,
+            'special': False,
+            'healing': False,
+            'tough': False,
+            'score_boost': False,
+            'forgiveness': True,  # New property
+            'width': 40,
+            'height': 40
+        }
+    elif chance < game.homing_circle_chance + game.forgiveness_circle_chance + game.score_circle_chance:  # Check for score circle first
+        circle = {
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
             'radius': 30,  # Largest radius
             'speed': 0.3,
             'special': False,
@@ -173,10 +207,10 @@ def spawn_circle():
             'width': 60,
             'height': 60
         }
-    elif chance < score_circle_chance + tough_circle_chance:  # Check for tough circle first
+    elif chance < game.homing_circle_chance + game.forgiveness_circle_chance + game.score_circle_chance + game.tough_circle_chance:  # Check for tough circle first
         circle = {
-            'x': random.randint(50, game.get_current_width() - 50),
-            'y': game.get_current_height() - 50,
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
             'radius': 25,  # Bigger radius to show it's tougher
             'speed': 0.3,
             'special': False,
@@ -186,10 +220,10 @@ def spawn_circle():
             'width': 50,
             'height': 50
         }
-    elif chance < score_circle_chance + tough_circle_chance + healing_circle_chance:
+    elif chance < game.homing_circle_chance + game.forgiveness_circle_chance + game.score_circle_chance + game.tough_circle_chance + game.healing_circle_chance:
         circle = {
-            'x': random.randint(50, game.get_current_width() - 50),
-            'y': game.get_current_height() - 50,
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
             'radius': 15,
             'speed': 0.3,
             'special': False,
@@ -197,10 +231,10 @@ def spawn_circle():
             'width': 30,
             'height': 30
         }
-    elif chance < score_circle_chance + tough_circle_chance + healing_circle_chance + special_circle_chance:
+    elif chance < game.homing_circle_chance + game.forgiveness_circle_chance + game.score_circle_chance + game.tough_circle_chance + game.healing_circle_chance + game.special_circle_chance:
         circle = {
-            'x': random.randint(50, game.get_current_width() - 50),
-            'y': game.get_current_height() - 50,
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
             'radius': 20,
             'speed': 0.3,
             'special': True,
@@ -211,8 +245,8 @@ def spawn_circle():
         }
     else:
         circle = {
-            'x': random.randint(50, game.get_current_width() - 50),
-            'y': game.get_current_height() - 50,
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
             'radius': 15,
             'speed': 0.3,
             'special': False,
@@ -269,7 +303,12 @@ def reset_game():
     circles.clear()
     bullets.clear()
     shooter['x'] = game.width // 2
-
+    game.special_circle_chance = 0.05
+    game.healing_circle_chance = 0.02
+    game.tough_circle_chance = 0.01
+    game.score_circle_chance = 0.005
+    game.forgiveness_circle_chance = 0.01
+    game.homing_circle_chance = 0.005
 
 def update():
     if game.paused or game.game_over:
@@ -281,13 +320,21 @@ def update():
             bullets.remove(bullet)
             game.missed_bullets += 1  
             # print(f"Missed shots: {game.missed_bullets}")
-            # if game.missed_bullets >= 3:
+            # if game.missed_bullets >= 5:
             #     game.game_over = True
             #     print(f"Game Over! Too many missed shots! Final score: {game.score}")
             #     return
 
     for circle in circles[:]:
-        circle['y'] -= circle['speed']
+        if circle.get('homing'):  # Add homing behavior
+            dx = shooter['x'] - circle['x']
+            dy = shooter['y'] - circle['y']
+            distance = (dx**2 + dy**2)**0.5
+            if distance > 0:  # Avoid division by zero
+                circle['x'] += (dx/distance) * circle['speed']
+                circle['y'] += (dy/distance) * circle['speed']
+        else:
+            circle['y'] -= circle['speed']
         
         if circle['special']:
             if circle['expanding']:
@@ -303,7 +350,11 @@ def update():
 
         for bullet in bullets[:]:
             if check_collision(bullet, circle):
-                if circle.get('score_boost'):  # Handle score boost circle
+                if circle.get('forgiveness'):  # Handle forgiveness circle
+                    game.missed_circles = max(0, game.missed_circles - 1)  # Can't go below 0
+                    print(f"Forgiveness circle! Missed circles reduced to: {game.missed_circles}")
+                    circles.remove(circle)
+                elif circle.get('score_boost'):  # Handle score boost circle
                     circle['hitpoints'] -= 1
                     if circle['hitpoints'] <= 0:
                         game.score += 10  # Add 10 to score
@@ -353,6 +404,13 @@ def update():
 
     if game.score >= game.level * 10:  # Progress every 10 points
         game.level += 1
+        game.missed_bullets = 0
+        game.special_circle_chance += 0.005
+        game.healing_circle_chance += 0.001
+        game.tough_circle_chance += 0.001
+        game.score_circle_chance += 0.0005
+        game.forgiveness_circle_chance += 0.001
+        game.homing_circle_chance += 0.005
         circles.clear()  # Clear all circles when zone shrinks
         print(f"Level {game.level}! Field is shrinking!")
         shooter['x'] = min(shooter['x'], game.get_current_width() - 20)
@@ -390,12 +448,16 @@ def display():
 
     # Draw circles with offset
     for circle in circles:
-        if circle.get('score_boost'):
+        if circle.get('homing'):
+            glColor3f(1.0, 0.0, 0.0)  # Bright red for homing circles
+        elif circle.get('forgiveness'):
+            glColor3f(0.0, 0.5, 1.0)  # Blue color for forgiveness circles
+        elif circle.get('score_boost'):
             glColor3f(1.0, 0.843, 0.0)  # Gold color for score boost circles
         elif circle.get('tough'):
             glColor3f(0.5, 0.8, 1.0)  # Light blue for tough circles
         elif circle['healing']:
-            glColor3f(1.0, 0.0, 0.0)  # Red for healing circles
+            glColor3f(1.0, 1.0, 1.0)  # White for healing circles
         elif circle['special']:
             glColor3f(1.0, 0.0, 1.0)  # Existing purple for special circles
         else:
