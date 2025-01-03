@@ -24,7 +24,7 @@ class GameState:
         self.forgiveness_circle_chance = 0.01
         self.homing_circle_chance = 0.005
         self.special_bullet_count = 3  # Add initial special bullet count
-        self.bullet_replenish_circle_chance = 0.05  # 5% chance for bullet replenish circles
+        self.bullet_replenish_circle_chance = 0.03  # 3% chance for bullet replenish circles
 
 
     def get_current_width(self):
@@ -424,7 +424,7 @@ def update():
                 elif circle['special']:
                     game.score += 3
                 elif circle.get('bullet_replenish'):
-                    game.special_bullet_count = min(game.special_bullet_count + 1, 5)  # Cap at 5
+                    game.special_bullet_count += 1  
                     print(f"Special bullets replenished! Count: {game.special_bullet_count}")
                     circles.remove(circle)
                 else:
@@ -524,9 +524,6 @@ def display():
 
     draw_buttons()
 
-    # Draw special bullet count
-    # glColor3f(1.0, 1.0, 1.0)
-    # draw_text(f"Special Bullets: {game.special_bullet_count}", 10, game.height - 20)
 
     glutSwapBuffers()
 
