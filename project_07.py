@@ -16,19 +16,23 @@ class GameState:
         self.level = 1
         self.base_width = 700
         self.base_height = 700
-        self.health = 3  # Add initial health
+        self.health =3  # Add initial health
         self.special_circle_chance = 0.05
         self.healing_circle_chance = 0.02
-        self.tough_circle_chance = 0.01
+        self.tough_circle_chance = 0.05
         self.score_circle_chance = 0.005
         self.forgiveness_circle_chance = 0.01
-        self.homing_circle_chance = 0.005
+        self.homing_circle_chance = 0.05
         self.special_bullet_count = 3  # Add initial special bullet count
         self.bullet_replenish_circle_chance = 0.03  # 3% chance for bullet replenish circles
+        self.invincibility_count = 3  # Number of invincibility uses
+        self.is_invincible = False
+        self.invincibility_timer = 0
+        self.invincibility_duration = 5  # Duration in seconds
 
 
     def get_current_width(self):
-        return self.base_width - ((self.level - 1) * 50)  
+        return self.base_width - ((self.level - 1) * 50) 
 
     def get_current_height(self):
         return self.base_height - ((self.level - 1) * 50)  
@@ -309,6 +313,11 @@ def handle_keyboard(key, x, y):
     if game.paused or game.game_over:
         return
 
+    if key == b'e' and game.invincibility_count > 0 and not game.is_invincible:
+        game.invincibility_count -= 1
+        game.is_invincible = True
+        game.invincibility_timer = glutGet(GLUT_ELAPSED_TIME)  # Get current time
+        print(f"Invincibility activated! Remaining uses: {game.invincibility_count}")
     if key == b'a' and shooter['x'] > 20:
         shooter['x'] -= shooter['speed']
     elif key == b'd' and shooter['x'] < game.get_current_width() - 20:
@@ -349,19 +358,29 @@ def reset_game():
     game.game_over = False
     game.health = 3  # Reset health
     game.special_bullet_count = 3  # Reset special bullet count
+    game.invincibility_count = 3
+    game.is_invincible = False
+    game.invincibility_timer = 0
     circles.clear()
     bullets.clear()
     shooter['x'] = game.width // 2
     game.special_circle_chance = 0.05
     game.healing_circle_chance = 0.02
-    game.tough_circle_chance = 0.01
+    game.tough_circle_chance = 0.05
     game.score_circle_chance = 0.005
     game.forgiveness_circle_chance = 0.01
-    game.homing_circle_chance = 0.005
+    game.homing_circle_chance = 0.05
 
 def update():
     if game.paused or game.game_over:
         return
+
+    # Check invincibility timer
+    if game.is_invincible:
+        current_time = glutGet(GLUT_ELAPSED_TIME)
+        if (current_time - game.invincibility_timer) >= (game.invincibility_duration * 1000):  # Convert to milliseconds
+            game.is_invincible = False
+            print("Invincibility wore off!")
 
     for bullet in bullets[:]:
         if bullet.get('special'):
@@ -402,6 +421,8 @@ def update():
 
         for bullet in bullets[:]:
             if check_collision(bullet, circle):
+                if circle not in circles:
+                    continue
                 if circle.get('forgiveness'):  # Handle forgiveness circle
                     game.missed_circles = max(0, game.missed_circles - 1)  # Can't go below 0
                     print(f"Forgiveness circle! Missed circles reduced to: {game.missed_circles}")
@@ -436,8 +457,11 @@ def update():
                     circles.remove(circle)
 
         if check_collision(circle, shooter):
-            game.health -= 1  # Reduce health instead of immediate game over
-            circles.remove(circle)  # Remove the circle that hit the player
+            if game.is_invincible:
+                circles.remove(circle)
+            else:    
+                game.health -= 1  # Reduce health instead of immediate game over
+                circles.remove(circle)  # Remove the circle that hit the player
             print(f"Hit! Health remaining: {game.health}")
             if game.health <= 0:
                 game.game_over = True
@@ -463,14 +487,16 @@ def update():
         game.missed_bullets = 0
         game.special_circle_chance += 0.005
         game.healing_circle_chance += 0.001
-        game.tough_circle_chance += 0.001
+        game.tough_circle_chance += 0.002
         game.score_circle_chance += 0.0005
         game.forgiveness_circle_chance += 0.001
         game.homing_circle_chance += 0.005
         circles.clear()  # Clear all circles when zone shrinks
         print(f"Level {game.level}! Field is shrinking!")
         shooter['x'] = min(shooter['x'], game.get_current_width() - 20)
-
+    if game.level == 11:
+        print("You Win!")
+        game.game_over = True
 
 def display():
     glClear(GL_COLOR_BUFFER_BIT)
@@ -492,15 +518,21 @@ def display():
     shooter_x = shooter['x'] + offset_x
     shooter_y = shooter['y'] + offset_y
     
-    # Draw shooter at offset position
-    glColor3f(1.0, 1.0, 1.0)
+    # Draw shooter with different color based on invincibility
+    if game.is_invincible:
+        glColor3f(1.0, 0.0, 0.0)  # Red color for invincible state
+    else:
+        glColor3f(1.0, 1.0, 1.0)  # Normal white color
     draw_shooter_at_pos(shooter_x, shooter_y)
 
     # Draw bullets with offset
-    glColor3f(1.0, 1.0, 0.0)
+    glColor3f(1.0, 1.0, 0.0)  # Yellow color for bullets
     for bullet in bullets:
-        draw_line(bullet['x'] + offset_x, bullet['y'] + offset_y, 
-                 bullet['x'] + offset_x, bullet['y'] + offset_y + 10)
+        if bullet.get('special'):
+            glColor3f(1.0, 0.5, 0.0)  # Orange color for special bullets
+        else:
+            glColor3f(1.0, 1.0, 0.0)  # Yellow for normal bullets
+        draw_circle(bullet['x'] + offset_x, bullet['y'] + offset_y, 3)  # Small radius of 3 for bullets
 
     # Draw circles with offset
     for circle in circles:
@@ -543,7 +575,7 @@ def main():
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB)
     glutInitWindowSize(game.width, game.height)
     glutInitWindowPosition(100, 100)
-    glutCreateWindow(b"Shoot The Circles!")
+    glutCreateWindow(b"Zone Shrinker")
     
     init_gl()
     
@@ -557,6 +589,7 @@ def main():
     print("D - Move Right")
     print("Spacebar - Shoot")
     print("Q - Fire Special Bullets (shoots in all directions)")
+    print("E - Activate Invincibility (5 seconds)")
     print("Click the green arrow to restart")
     print("Click the yellow button to pause/resume")
     print("Click the red X to exit")
