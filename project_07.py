@@ -23,9 +23,10 @@ class GameState:
         self.score_circle_chance = 0.005
         self.forgiveness_circle_chance = 0.01
         self.homing_circle_chance = 0.005
+        self.special_bullet_count = 3  # Add initial special bullet count
+        self.bullet_replenish_circle_chance = 0.05  # 5% chance for bullet replenish circles
 
 
-        
     def get_current_width(self):
         return self.base_width - ((self.level - 1) * 50)  
 
@@ -40,7 +41,7 @@ class GameState:
 
 
 game = GameState()
-shooter = {'x': game.width//2, 'y': 10, 'width': 40, 'height': 50, 'speed': 18}  
+shooter = {'x': game.width//2, 'y': 3, 'width': 40, 'height': 50, 'speed': 18}  
 bullets = []
 circles = []
 
@@ -112,13 +113,24 @@ def draw_line(x1, y1, x2, y2):
 
 
 def draw_shooter_at_pos(x, y):
-    draw_line(x - 20, y + 30, x + 20, y + 30)
-    draw_line(x - 20, y + 30, x, y + 50)
-    draw_line(x + 20, y + 30, x, y + 50)
-    draw_line(x - 20, y, x + 20, y)
-    draw_line(x - 20, y + 30, x - 20, y)
-    draw_line(x + 20, y + 30, x + 20, y)
-
+    # Main body
+    draw_line(x - 15, y + 20, x + 15, y + 20)  # Upper body
+    draw_line(x - 15, y + 5, x + 15, y + 5)    # Lower body
+    draw_line(x - 15, y + 20, x - 15, y + 5)   # Left body
+    draw_line(x + 15, y + 20, x + 15, y + 5)   # Right body
+    
+    # Nose cone
+    draw_line(x - 15, y + 20, x, y + 35)      # Left nose
+    draw_line(x + 15, y + 20, x, y + 35)      # Right nose
+    
+    # Wings
+    draw_line(x - 15, y + 15, x - 25, y)      # Left wing
+    draw_line(x + 15, y + 15, x + 25, y)      # Right wing
+    
+    # Engine exhausts
+    draw_line(x - 10, y + 5, x - 10, y)       # Left exhaust
+    draw_line(x, y + 5, x, y)                 # Middle exhaust
+    draw_line(x + 10, y + 5, x + 10, y)       # Right exhaust
 
 def draw_shooter():
     glColor3f(1.0, 1.0, 1.0)
@@ -131,6 +143,7 @@ def draw_buttons():
     glColor3f(0.0, 1.0, 0.0)
     draw_line(50, game.height - 30, 70, game.height - 20)
     draw_line(50, game.height - 30, 70, game.height - 40)
+   
 
     glColor3f(1.0, 0.75, 0.0)
     if game.paused:
@@ -139,6 +152,8 @@ def draw_buttons():
     else:
         draw_line(120, game.height - 40, 140, game.height - 30)
         draw_line(140, game.height - 30, 120, game.height - 20)
+        draw_line(120, game.height - 40, 120, game.height - 20)
+        
 
     glColor3f(1.0, 0.0, 0.0)
     draw_line(180, game.height - 40, 200, game.height - 20)
@@ -164,7 +179,23 @@ def check_collision(box1, box2):
 
 def spawn_circle():
     chance = random.random()
-    if chance < game.homing_circle_chance:  # Check for homing circle first
+    if chance < game.bullet_replenish_circle_chance:  # Check for bullet replenish circle first
+        circle = {
+            'x': random.randint(50, game.get_current_width()-50),
+            'y': game.get_current_height(),
+            'radius': 20,
+            'speed': 0.3,
+            'special': False,
+            'healing': False,
+            'tough': False,
+            'score_boost': False,
+            'forgiveness': False,
+            'homing': False,
+            'bullet_replenish': True,
+            'width': 40,
+            'height': 40
+        }
+    elif chance < game.homing_circle_chance:  # Check for homing circle first
         circle = {
             'x': random.randint(50, game.get_current_width()-50),
             'y': game.get_current_height(),
@@ -288,8 +319,25 @@ def handle_keyboard(key, x, y):
             'y': shooter['y'] + 30,
             'width': 5,
             'height': 10,
-            'speed': 8  # Increased from 1
+            'speed': 8,
+            'special': False
         })
+    elif key == b'q' and game.special_bullet_count > 0:  # Add Q key for special bullets
+        game.special_bullet_count -= 1
+        # Create 8 bullets in different directions
+        for angle in range(0, 180, 12):
+            import math
+            bullets.append({
+                'x': shooter['x'],
+                'y': shooter['y'] + 30,
+                'width': 5,
+                'height': 10,
+                'speed': 8,
+                'special': True,
+                'angle': angle,
+                'dx': int(math.cos(math.radians(angle))*8),
+                'dy': int(math.sin(math.radians(angle))*8)
+            })
 
 
 def reset_game():
@@ -300,6 +348,7 @@ def reset_game():
     game.paused = False
     game.game_over = False
     game.health = 3  # Reset health
+    game.special_bullet_count = 3  # Reset special bullet count
     circles.clear()
     bullets.clear()
     shooter['x'] = game.width // 2
@@ -315,15 +364,18 @@ def update():
         return
 
     for bullet in bullets[:]:
-        bullet['y'] += bullet['speed']
-        if bullet['y'] > game.get_current_height():
-            bullets.remove(bullet)
-            game.missed_bullets += 1  
-            # print(f"Missed shots: {game.missed_bullets}")
-            # if game.missed_bullets >= 5:
-            #     game.game_over = True
-            #     print(f"Game Over! Too many missed shots! Final score: {game.score}")
-            #     return
+        if bullet.get('special'):
+            bullet['x'] += bullet['dx']
+            bullet['y'] += bullet['dy']
+            # Remove if outside screen bounds
+            if (bullet['x'] < 0 or bullet['x'] > game.get_current_width() or
+                bullet['y'] < 0 or bullet['y'] > game.get_current_height()):
+                bullets.remove(bullet)
+        else:
+            bullet['y'] += bullet['speed']
+            if bullet['y'] > game.get_current_height():
+                bullets.remove(bullet)
+                game.missed_bullets += 1
 
     for circle in circles[:]:
         if circle.get('homing'):  # Add homing behavior
@@ -371,6 +423,10 @@ def update():
                     print(f"Health restored! Current health: {game.health}")
                 elif circle['special']:
                     game.score += 3
+                elif circle.get('bullet_replenish'):
+                    game.special_bullet_count = min(game.special_bullet_count + 1, 5)  # Cap at 5
+                    print(f"Special bullets replenished! Count: {game.special_bullet_count}")
+                    circles.remove(circle)
                 else:
                     game.score += 1
                 print(f"Score: {game.score}")
@@ -460,11 +516,17 @@ def display():
             glColor3f(1.0, 1.0, 1.0)  # White for healing circles
         elif circle['special']:
             glColor3f(1.0, 0.0, 1.0)  # Existing purple for special circles
+        elif circle.get('bullet_replenish'):
+            glColor3f(1.0, 0.5, 0.0)  # Orange color for bullet replenish circles
         else:
             glColor3f(0.0, 1.0, 0.0)  # Existing green for normal circles
         draw_circle(circle['x'] + offset_x, circle['y'] + offset_y, int(circle['radius']))
 
     draw_buttons()
+
+    # Draw special bullet count
+    # glColor3f(1.0, 1.0, 1.0)
+    # draw_text(f"Special Bullets: {game.special_bullet_count}", 10, game.height - 20)
 
     glutSwapBuffers()
 
@@ -497,6 +559,7 @@ def main():
     print("A - Move Left")
     print("D - Move Right")
     print("Spacebar - Shoot")
+    print("Q - Fire Special Bullets (shoots in all directions)")
     print("Click the green arrow to restart")
     print("Click the yellow button to pause/resume")
     print("Click the red X to exit")
